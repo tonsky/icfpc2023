@@ -12,6 +12,9 @@
 (def *state
   (atom nil))
 
+(def *future
+  (atom nil))
+
 (defn redraw []
   (some-> *window deref window/request-frame)
   :success)

@@ -26,7 +26,7 @@
 (defn -main [& args]
   (ns/set-refresh-dirs "src")
   (main/-main)
-  (reset-window)
+  #_(reset-window)
   (server/start-server
     {:name "repl"
      :port 5555
