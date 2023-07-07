@@ -103,30 +103,71 @@
             (* 1000000 taste)
             (+ (* (- mx ax) (- mx ax)) (* (- my ay) (- my ay)))))))))
 
-(defn place-musicians [state]
+(defn tastes [state]
+  (->> (:attendees state)
+    (reduce
+      (fn [v a]
+        (mapv + v (:tastes a)))
+      (vec (repeat (count (:tastes (nth (:attendees state) 0))) 0)))
+    (map vector (range))
+    (into {})))
+
+(defn shrink [percent xs]
+  (filter (fn [_] (<= (rand) percent)) xs))
+
+(defn places [state]
   (let [[left top] (:stage_bottom_left state)
         right      (+ left (:stage_width state))
         bottom     (+ top (:stage_height state))
-        placements (loop [musicians  (:musicians state)
-                          placements []
-                          x          (+ left 10)
-                          y          (+ top 10)]
+        places     (loop [x      (+ left 10)
+                          y      (+ top 10)
+                          odd?   true
+                          places []]
+                     (cond
+                       (> x (- right 10))
+                       (recur (+ left (if odd? 20 10)) (+ y 17.33) (not odd?) places)
+                       
+                       (> y (- bottom 10))
+                       places
+                       
+                       :else
+                       (recur (+ x 20) y odd? (conj places {:x x :y y}))))
+        attendees' (shrink 0.1 (:attendees state))]
+    (->> places
+      (pmap
+        (fn [{:keys [x y] :as place}]
+          (assoc place :visible
+            (reduce
+              (fn [acc attendee]
+                (if (any? #(blocks? x y (:x attendee) (:y attendee) (:x %) (:y %)) places)
+                  acc
+                  (+ acc 1)))
+              0 attendees'))))
+      (sort-by :visible)
+      reverse)))
+
+(defn place-musicians [state]
+  (let [tastes     (tastes state)
+        places     (places state)
+        musicians  (->> (mapv vector (range) (:musicians state))
+                     (sort-by (fn [[id instr]]
+                                (- (tastes instr))))
+                     (mapv first))
+        placements (loop [musicians  musicians
+                          placements (vec (repeat (count musicians) nil))
+                          places     places]
                      (cond
                        (empty? musicians)
                        placements
         
-                       (> x (- right 10))
-                       (recur musicians placements (+ left 10) (+ y 20))
-        
-                       (> y (- bottom 10))
-                       (throw (ex-info "Not enough space!" {:left left :top top :right right :bottom bottom :placed (count placements)}))
+                       (empty? places)
+                       (throw (ex-info "Not enough space!" {:placements placements}))
         
                        :else
                        (recur
                          (next musicians)
-                         (conj placements {:x x :y y})
-                         (+ x 20)
-                         y)))]
+                         (assoc placements (first musicians) (first places))
+                         (next places))))]
     (assoc state
       :placements placements)))
 
@@ -179,10 +220,10 @@
           (core/log-error t)))
       (reset! state/*future nil))))
 
-(set-problem! 19)
+(set-problem! 11)
 
 (comment
-  (doseq [i (range 1 46)]
+  (doseq [i (range 7 46)]
     (try
       (measure (str "Problem " i)
         (reset! state/*state
@@ -268,7 +309,7 @@
     
       ;; score
       (canvas/draw-string canvas (str "Problem: " problem_id) 20 40 (:font-ui ctx) (:fill-text ctx))
-      (canvas/draw-string canvas (str "Score: " score) 20 80 (:font-ui ctx) (:fill-text ctx)))))
+      (canvas/draw-string canvas (format "Score: %,d" (or score -1)) 20 80 (:font-ui ctx) (:fill-text ctx)))))
 
 (def app
   (ui/default-theme
